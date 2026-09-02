@@ -38,8 +38,10 @@ jobs:
           LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
           LIGHTDATA_PASS: ${{ secrets.LIGHTDATA_PASS }}
         run: |
-          RUTA=$(python descargar_lightdata.py | tail -n1 | sed 's/^Archivo descargado: //')
-          echo "Archivo: $RUTA"
+          set -e
+          SALIDA=$(python descargar_lightdata.py)
+          echo "$SALIDA"
+          RUTA=$(echo "$SALIDA" | tail -n1 | sed 's/^Archivo descargado: //')
           echo "ruta=$RUTA" >> "$GITHUB_OUTPUT"
 
       - name: Publicar snapshot en Firestore

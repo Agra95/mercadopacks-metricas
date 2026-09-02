@@ -70,6 +70,17 @@ def descargar(usuario: str, clave: str) -> Path:
             page.get_by_role("textbox", name="Password").fill(clave)
             page.get_by_text("Ingresar").click()
 
+            # LightData a veces muestra un diálogo de confirmación (p.ej.
+            # "ya hay una sesión abierta, ¿continuar?") antes de dejar
+            # entrar — se vio durante la primera grabación pero no en la
+            # segunda, así que parece depender de si había una sesión
+            # previa activa. Si aparece se confirma; si no aparece en unos
+            # segundos, se sigue sin problema.
+            try:
+                page.get_by_role("button", name="OK").click(timeout=5000)
+            except PlaywrightTimeoutError:
+                pass
+
             page.get_by_role("link", name="local_shipping Envios").click()
             page.get_by_role("link", name="menu Envios").click()
 
@@ -99,15 +110,18 @@ def descargar(usuario: str, clave: str) -> Path:
             download = download_info.value
             popup.close()
 
-        except PlaywrightTimeoutError as e:
+        except Exception as e:
             captura = Path(__file__).resolve().parent / "error_descarga.png"
-            page.screenshot(path=str(captura))
+            try:
+                page.screenshot(path=str(captura))
+            except Exception:
+                pass  # si la página ya no responde, seguimos sin la captura
             context.close()
             browser.close()
+            tipo = "Timeout" if isinstance(e, PlaywrightTimeoutError) else type(e).__name__
             raise RuntimeError(
-                f"Timeout esperando un elemento de LightData. Se guardó una "
-                f"captura de pantalla en {captura} para diagnosticar. "
-                f"Error original: {e}"
+                f"{tipo} en el flujo de LightData. Se guardó una captura de "
+                f"pantalla en {captura} para diagnosticar. Error original: {e}"
             )
 
         nombre = "listado_envios_" + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + ".xls"
