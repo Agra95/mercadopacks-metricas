@@ -1,0 +1,10 @@
+# Exports crudos de LightData: contienen datos personales reales
+# (nombre, teléfono, email del destinatario — ver diccionario_de_datos.md).
+# No se versionan en git, sobre todo porque el repo es público.
+logistica-metricas/datos_crudos/*.xls
+logistica-metricas/datos_crudos/*.xlsx
+!logistica-metricas/datos_crudos/.gitkeep
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db
