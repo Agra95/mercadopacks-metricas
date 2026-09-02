@@ -1,0 +1,56 @@
+name: Descarga diaria de LightData
+
+# Corre todos los días a las 03:00 UTC = 00:00 hora Argentina.
+# Además se puede disparar a mano desde la pestaña "Actions" del repo
+# (workflow_dispatch) para probarlo sin esperar al horario programado.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  descargar-y-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        working-directory: logistica-metricas/scripts
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Descargar export de LightData (día de ayer)
+        id: descarga
+        working-directory: logistica-metricas/scripts
+        env:
+          LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
+          LIGHTDATA_PASS: ${{ secrets.LIGHTDATA_PASS }}
+        run: |
+          RUTA=$(python descargar_lightdata.py | tail -n1 | sed 's/^Archivo descargado: //')
+          echo "Archivo: $RUTA"
+          echo "ruta=$RUTA" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar snapshot en Firestore
+        working-directory: logistica-metricas/scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python publicar_firestore.py "${{ steps.descarga.outputs.ruta }}"
+
+      # El .xls crudo (con datos personales de destinatarios) NO se commitea
+      # al repo — es público. Solo el snapshot agregado llega a Firestore.
+      # Si algo falla antes de llegar acá, esta captura ayuda a diagnosticar
+      # sin tener que reproducirlo a mano ni pedir credenciales por chat.
+      - name: Subir captura de pantalla si falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-descarga-lightdata
+          path: logistica-metricas/scripts/error_descarga.png
+          if-no-files-found: ignore

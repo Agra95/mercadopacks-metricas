@@ -10,6 +10,8 @@ entregas antes de las 21hs, cancelados, y efectividad por chofer y por zona.
 Mercadopacks - Metricas/       → raíz del repositorio git
 ├── index.html                 → redirige a dashboard/dashboard_logistica.html (URL limpia de GitHub Pages)
 ├── .gitignore                 → excluye los .xls crudos (tienen datos personales) del repo público
+├── .github/workflows/
+│   └── descarga_diaria.yml     → corre todos los días a las 00hs ART (ver sección de automatización)
 └── logistica-metricas/
     ├── README.md               → este archivo
     ├── reglas_de_negocio.md    → definiciones oficiales de cada métrica (fuente de verdad)
@@ -20,7 +22,10 @@ Mercadopacks - Metricas/       → raíz del repositorio git
     │   ├── dashboard_logistica.html   → dashboard interactivo (ver sección abajo)
     │   └── assets/logo-mp.png          → logo de la empresa, embebido en base64 en el HTML
     └── scripts/
-        └── generar_reporte.py  → script que arma el reporte en Excel
+        ├── generar_reporte.py       → script que arma el reporte en Excel
+        ├── descargar_lightdata.py   → automatización: login + descarga diaria del export
+        ├── publicar_firestore.py    → calcula el snapshot del día y lo publica en Firestore
+        └── requirements.txt         → dependencias de Python para los tres scripts
 ```
 
 ## Cómo usarlo
@@ -139,6 +144,56 @@ cerrar las reglas).
   el repo es público. Quedan solo en la carpeta local `datos_crudos/` de quien
   los descarga.
 
+## Automatización de la descarga diaria (GitHub Actions)
+
+LightData no tiene API ni URL fija de exportación — solo se puede descargar
+el archivo iniciando sesión manualmente en el navegador. Por eso la
+automatización usa **Playwright** para manejar un navegador real de forma
+desatendida, orquestado por **GitHub Actions** (gratis, no depende de que
+una computadora quede prendida).
+
+**Qué hace todos los días a las 00:00hs (hora Argentina):**
+1. `scripts/descargar_lightdata.py` inicia sesión en LightData, filtra el
+   listado de envíos por el día que acaba de cerrar (Desde = Hasta = ayer,
+   sin filtro de Estado — se necesitan todos los estados) y descarga el
+   `.xls`.
+2. `scripts/publicar_firestore.py` toma ese archivo, calcula exactamente el
+   mismo snapshot que arma el dashboard en el navegador (mismas reglas de
+   negocio, ver comentarios en el script) y lo publica en Firestore.
+3. El dashboard no necesita ningún cambio para esto — lee de Firestore igual
+   que cuando alguien carga un archivo a mano.
+
+El `.xls` descargado **no se guarda en el repositorio de git** (contiene
+datos personales de destinatarios y el repo es público) — vive solo en el
+runner de GitHub Actions durante esa corrida y se descarta al terminar; lo
+que queda de forma permanente es el snapshot agregado en Firestore.
+
+**Configuración necesaria (una sola vez), en
+`github.com/Agra95/mercadopacks-metricas` → Settings → Secrets and
+variables → Actions → New repository secret:**
+
+| Secret | Valor |
+|---|---|
+| `LIGHTDATA_USER` | Usuario de LightData |
+| `LIGHTDATA_PASS` | Contraseña de LightData |
+| `FIREBASE_SERVICE_ACCOUNT` | El JSON completo de una service account de Firebase (Consola de Firebase → ⚙️ Configuración del proyecto → pestaña "Cuentas de servicio" → "Generar nueva clave privada") |
+
+Estos tres valores quedan encriptados por GitHub y nunca aparecen en los
+logs de las corridas, ni fueron compartidos en ningún chat al armar esto.
+
+**Cómo probarlo sin esperar al horario programado:** pestaña **Actions** del
+repo → workflow "Descarga diaria de LightData" → botón **"Run workflow"**. Si
+falla, el job sube como *artifact* descargable una captura de pantalla del
+momento del error (`error-descarga-lightdata`), para diagnosticar sin tener
+que repetirlo a mano.
+
+**Limitación conocida:** el selector de fecha del calendario de LightData se
+probó seleccionando el día del mes directamente; si "ayer" cae en el mes
+anterior (es decir, hoy es el día 1), el calendario podría necesitar navegar
+un mes atrás antes de poder elegir ese día — este caso no se probó todavía.
+Si el workflow falla puntualmente el día 1 de un mes, revisar
+`seleccionar_dia()` en `descargar_lightdata.py` primero.
+
 ## Dónde están las definiciones
 
 Cualquier duda de "¿esto cuenta como entregado?" o "¿por qué el corte es a
@@ -157,11 +212,9 @@ Ideas para las próximas iteraciones, en orden sugerido:
 2. **Histórico comparable:** guardar cada reporte generado y armar una hoja
    o script aparte que compare período contra período (esta semana vs. la
    anterior, este mes vs. el pasado).
-3. **Automatizar la descarga (en desarrollo):** LightData no tiene API, solo
-   login manual, así que se está armando un script con Playwright que inicia
-   sesión, descarga el `.xls` del día y publica el snapshot en Firestore, para
-   que corra solo todos los días a las 00hs vía GitHub Actions. Ver
-   `scripts/descargar_lightdata.py` cuando exista.
+3. ~~**Automatizar la descarga**~~ — hecho: ver sección "Automatización de la
+   descarga diaria" más arriba. Pendiente solo cargar los 3 secrets en GitHub
+   para que empiece a correr.
 4. **Alertas:** un chequeo simple que avise si algún chofer cae por debajo
    de cierto % de efectividad, o si el % de cancelados de la semana se
    dispara respecto del promedio.
@@ -177,3 +230,4 @@ Ideas para las próximas iteraciones, en orden sugerido:
 | 2026-09-02 | Ajustes de UX: al cargar un archivo el panel se posiciona solo en el rango de fechas de ese archivo; se sacó el mensaje de carga con el detalle de cantidad/fechas de la pantalla; se corrigieron los labels de la leyenda en "Evolución diaria" que se salían del margen; el cruce por hora de entrega ahora incluye todos los estados (no solo entregado); el gráfico por zona muestra la cantidad de cada segmento de la barra; el ranking de choferes muestra la cantidad de entregas en cada una de las 4 franjas horarias. |
 | 2026-09-02 | Rebranding: el dashboard pasó a llamarse "Seguimiento de envíos - Mercadopacks" (antes "Torre de Control · Envíos") y el logo autogenerado (SVG con las letras "MP") se reemplazó por el isotipo real de la empresa (`dashboard/assets/logo-mp.png`, embebido en el HTML como base64 para mantener el archivo autocontenido). |
 | 2026-09-02 | Se creó el repositorio git (`github.com/Agra95/mercadopacks-metricas`) y se publicó el dashboard en GitHub Pages (`agra95.github.io/mercadopacks-metricas`). El almacenamiento compartido se migró de `window.storage` (exclusivo de Claude.ai) a Firebase Firestore, para que el dashboard funcione como sitio independiente. Los `.xls` crudos (con datos personales de destinatarios) se excluyeron del repo vía `.gitignore` por ser un repo público. |
+| 2026-09-02 | Automatización de la descarga diaria: `scripts/descargar_lightdata.py` (Playwright) inicia sesión en LightData y descarga el export de "ayer", `scripts/publicar_firestore.py` calcula el mismo snapshot que el dashboard y lo publica en Firestore, orquestados por `.github/workflows/descarga_diaria.yml` (cron 00hs ART). Pendiente: cargar los secrets `LIGHTDATA_USER`/`LIGHTDATA_PASS`/`FIREBASE_SERVICE_ACCOUNT` en GitHub para que empiece a correr. |

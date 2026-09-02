@@ -2,10 +2,17 @@
 
 Este documento es la **fuente de verdad** de cómo se calcula cada métrica.
 Cuando una definición cambie o aparezca un caso nuevo no contemplado, se
-actualiza acá primero y después se refleja en el script
-(`scripts/generar_reporte.py`, sección `CONFIG` al inicio del archivo).
+actualiza acá primero y después se refleja en los tres lugares que
+implementan estas reglas por separado (no comparten código entre sí):
+- `scripts/generar_reporte.py`, sección `CONFIG` al inicio del archivo.
+- `dashboard/dashboard_logistica.html`, sección "Reglas de negocio" al
+  inicio del `<script>`.
+- `scripts/publicar_firestore.py` (automatización diaria), que reutiliza
+  `ESTADOS_ENTREGA_EFECTIVA`/`ESTADOS_CANCELADO` de `generar_reporte.py` pero
+  calcula las franjas horarias y los agregados por su cuenta, replicando la
+  misma lógica que el dashboard.
 
-Última actualización: 2026-09-01.
+Última actualización: 2026-09-02.
 
 ---
 

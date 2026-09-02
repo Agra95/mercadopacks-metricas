@@ -5,6 +5,14 @@ logistica-metricas/datos_crudos/*.xls
 logistica-metricas/datos_crudos/*.xlsx
 !logistica-metricas/datos_crudos/.gitkeep
 
+# Captura de pantalla que genera descargar_lightdata.py si falla (debug local)
+logistica-metricas/scripts/error_descarga.png
+
+# Entorno virtual de Python, si se crea uno local
+logistica-metricas/scripts/.venv/
+__pycache__/
+*.pyc
+
 # Sistema operativo / editor
 .DS_Store
 Thumbs.db
