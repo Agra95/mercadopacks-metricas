@@ -7,16 +7,20 @@ entregas antes de las 21hs, cancelados, y efectividad por chofer y por zona.
 ## Estructura
 
 ```
-logistica-metricas/
-├── README.md                  → este archivo
-├── reglas_de_negocio.md       → definiciones oficiales de cada métrica (fuente de verdad)
-├── diccionario_de_datos.md    → qué significa cada columna del archivo crudo
-├── datos_crudos/              → los .xls que vas descargando del sistema (uno por corte/fecha)
-├── reportes/                  → los .xlsx generados por el script (detalle/auditoría)
-├── dashboard/
-│   └── dashboard_logistica.html   → dashboard interactivo (ver sección abajo)
-└── scripts/
-    └── generar_reporte.py     → script que arma el reporte en Excel
+Mercadopacks - Metricas/       → raíz del repositorio git
+├── index.html                 → redirige a dashboard/dashboard_logistica.html (URL limpia de GitHub Pages)
+├── .gitignore                 → excluye los .xls crudos (tienen datos personales) del repo público
+└── logistica-metricas/
+    ├── README.md               → este archivo
+    ├── reglas_de_negocio.md    → definiciones oficiales de cada métrica (fuente de verdad)
+    ├── diccionario_de_datos.md → qué significa cada columna del archivo crudo
+    ├── datos_crudos/           → los .xls que vas descargando del sistema (NO se suben a git)
+    ├── reportes/                → los .xlsx generados por el script (detalle/auditoría)
+    ├── dashboard/
+    │   ├── dashboard_logistica.html   → dashboard interactivo (ver sección abajo)
+    │   └── assets/logo-mp.png          → logo de la empresa, embebido en base64 en el HTML
+    └── scripts/
+        └── generar_reporte.py  → script que arma el reporte en Excel
 ```
 
 ## Cómo usarlo
@@ -88,17 +92,38 @@ cualquier navegador.
   `reglas_de_negocio.md`, sección 9.
 
 **Cómo se comparte con el equipo:** los datos que se cargan quedan guardados
-de forma compartida — **cualquier persona que abra este mismo archivo HTML
-ve los mismos datos**, no hace falta que cada uno suba el archivo por su
-cuenta. Para que gerencia y el equipo lo vean, alcanza con que una persona
-lo suba al lugar donde lo van a abrir todos (ver "Cómo publicarlo" abajo) y
-que alguien cargue el export del día ahí una vez.
+en una base de datos compartida (Firebase Firestore) — **cualquier persona
+que entre a la URL pública ve los mismos datos**, no hace falta que cada uno
+suba el archivo por su cuenta. Alcanza con que una persona cargue el export
+del día una vez.
+
+**Dónde vive publicado:** el dashboard está alojado gratis en GitHub Pages,
+en **https://agra95.github.io/mercadopacks-metricas/** (repo:
+`github.com/Agra95/mercadopacks-metricas`, público). El HTML no necesita
+ningún proceso de build — cualquier cambio que se pushea a la rama `main` se
+refleja solo en esa URL en 1-2 minutos.
+
+**Cómo funciona el guardado compartido:** el archivo `dashboard_logistica.html`
+inicializa el SDK de Firebase (config del proyecto `mercadopacks-metricas`,
+ver bloque `firebaseConfig` al inicio del `<script>`) y usa dos colecciones de
+Firestore:
+- `envios_index` (un solo documento, `index`) — la lista de fechas que tienen
+  datos cargados.
+- `envios_daily` — un documento por fecha (ID = fecha ISO, ej. `2026-08-31`)
+  con el snapshot agregado de ese día (totales, buckets horarios, por chofer,
+  por zona).
+
+Las reglas de Firestore están abiertas (lectura/escritura sin autenticación)
+para esas dos colecciones — es una decisión consciente porque es una
+herramienta interna sin sistema de login y lo que se guarda ahí son métricas
+agregadas, no datos personales de destinatarios. Si el link llegase a
+filtrarse fuera del equipo habría que revisar esto (agregar autenticación o
+cerrar las reglas).
 
 **Qué NO hace (para que no haya sorpresas):**
-- No se conecta solo al sistema de LightData — alguien tiene que descargar
-  el `.xls` y arrastrarlo al dashboard. Si querés que eso también sea
-  automático, hace falta que el sistema de logística tenga una forma de
-  exportar por API o por URL fija (ver backlog más abajo).
+- No se conecta solo al sistema de LightData todavía — alguien tiene que
+  descargar el `.xls` y arrastrarlo al dashboard. La automatización de esto
+  (descarga diaria a las 00hs) está en desarrollo, ver backlog más abajo.
 - No es "tiempo real" en el sentido de que empuje cambios al instante:
   cuando alguien carga un archivo nuevo, el panel se refresca solo cada
   ~45 segundos para el resto de las personas que lo tengan abierto (o
@@ -109,20 +134,10 @@ que alguien cargue el export del día ahí una vez.
   código). Si cambiás una regla, hay que actualizarla en `reglas_de_negocio.md`
   y después replicarla en los dos lugares — está comentado en el código de
   ambos para que sea fácil de encontrar.
-
-**Cómo publicarlo para que lo vea todo el equipo:** las opciones más simples,
-de más a menos esfuerzo:
-1. Subir el `.html` a una carpeta compartida (Drive, SharePoint, etc.) y que
-   cada uno lo abra desde ahí con doble click — funciona, pero cada persona
-   lo tiene que volver a abrir para ver actualizaciones.
-2. Subirlo a un hosting simple (Netlify, Vercel, GitHub Pages, o un
-   servidor interno) para que todos entren por una misma URL — mejor
-   experiencia, requiere que alguien lo despliegue una vez.
-3. Si lo tenés abierto como artifact en Claude.ai, usar el botón "Share" /
-   "Publicar" del panel del artifact — genera un link público que cualquiera
-   puede abrir sin cuenta de Claude, sin necesidad de hosting propio. (En
-   planes Team/Enterprise, un administrador de la organización puede tener
-   que habilitar antes el uso de links públicos.)
+- Los `.xls` crudos (que traen nombre/teléfono/email del destinatario) **no
+  se suben al repositorio de git** — está en `.gitignore` a propósito porque
+  el repo es público. Quedan solo en la carpeta local `datos_crudos/` de quien
+  los descarga.
 
 ## Dónde están las definiciones
 
@@ -142,14 +157,14 @@ Ideas para las próximas iteraciones, en orden sugerido:
 2. **Histórico comparable:** guardar cada reporte generado y armar una hoja
    o script aparte que compare período contra período (esta semana vs. la
    anterior, este mes vs. el pasado).
-3. **Automatizar la descarga:** si el sistema de logística tiene una forma
-   de exportar por API o por URL fija, se puede automatizar para que no
-   haga falta descargar el archivo a mano cada vez.
+3. **Automatizar la descarga (en desarrollo):** LightData no tiene API, solo
+   login manual, así que se está armando un script con Playwright que inicia
+   sesión, descarga el `.xls` del día y publica el snapshot en Firestore, para
+   que corra solo todos los días a las 00hs vía GitHub Actions. Ver
+   `scripts/descargar_lightdata.py` cuando exista.
 4. **Alertas:** un chequeo simple que avise si algún chofer cae por debajo
    de cierto % de efectividad, o si el % de cancelados de la semana se
    dispara respecto del promedio.
-5. **Dashboard:** una vez que el histórico tenga varios períodos cargados,
-   pasar de archivos `.xlsx` sueltos a una vista tipo dashboard.
 
 ## Historial de cambios del proyecto
 
@@ -161,3 +176,4 @@ Ideas para las próximas iteraciones, en orden sugerido:
 | 2026-09-02 | Franjas horarias de entrega (4 tramos), filtros interactivos por zona/franja/chofer, columna Pendientes, y rediseño con la paleta de marca. |
 | 2026-09-02 | Ajustes de UX: al cargar un archivo el panel se posiciona solo en el rango de fechas de ese archivo; se sacó el mensaje de carga con el detalle de cantidad/fechas de la pantalla; se corrigieron los labels de la leyenda en "Evolución diaria" que se salían del margen; el cruce por hora de entrega ahora incluye todos los estados (no solo entregado); el gráfico por zona muestra la cantidad de cada segmento de la barra; el ranking de choferes muestra la cantidad de entregas en cada una de las 4 franjas horarias. |
 | 2026-09-02 | Rebranding: el dashboard pasó a llamarse "Seguimiento de envíos - Mercadopacks" (antes "Torre de Control · Envíos") y el logo autogenerado (SVG con las letras "MP") se reemplazó por el isotipo real de la empresa (`dashboard/assets/logo-mp.png`, embebido en el HTML como base64 para mantener el archivo autocontenido). |
+| 2026-09-02 | Se creó el repositorio git (`github.com/Agra95/mercadopacks-metricas`) y se publicó el dashboard en GitHub Pages (`agra95.github.io/mercadopacks-metricas`). El almacenamiento compartido se migró de `window.storage` (exclusivo de Claude.ai) a Firebase Firestore, para que el dashboard funcione como sitio independiente. Los `.xls` crudos (con datos personales de destinatarios) se excluyeron del repo vía `.gitignore` por ser un repo público. |

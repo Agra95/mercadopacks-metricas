@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Seguimiento de envíos - Mercadopacks</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -483,23 +485,54 @@
   function fmtNum(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : new Intl.NumberFormat('es-AR').format(v); }
 
   // ======================================================================
-  // Storage helpers (window.storage puede tirar error en vez de null)
+  // Storage compartido — Firestore (Firebase). Reemplaza al viejo
+  // window.storage, que solo existía dentro de Claude.ai como Artifact.
+  // Ahora que el dashboard vive como sitio estático independiente (GitHub
+  // Pages), el guardado compartido entre todo el equipo pasa por acá.
+  //
+  // Se mantiene la misma firma storeGet/storeSet(key, ...) que usa el resto
+  // del código (aggregate, render, handleFile, etc.) para no tener que
+  // tocar nada más: solo cambia CÓMO se resuelve cada clave puertas adentro.
   // ======================================================================
-  async function storeGet(key, shared){
-    try{
-      const r = await window.storage.get(key, shared);
-      return r ? JSON.parse(r.value) : null;
-    }catch(e){ return null; }
-  }
-  async function storeSet(key, value, shared){
-    try{
-      await window.storage.set(key, JSON.stringify(value), shared);
-      return true;
-    }catch(e){ console.error('storage.set failed', e); return false; }
-  }
+  const firebaseConfig = {
+    apiKey: "AIzaSyBCU3r90PL-zT72pS6FWocgGJuVf8X0niA",
+    authDomain: "mercadopacks-metricas.firebaseapp.com",
+    projectId: "mercadopacks-metricas",
+    storageBucket: "mercadopacks-metricas.firebasestorage.app",
+    messagingSenderId: "397997085689",
+    appId: "1:397997085689:web:34750a4e98d2fdff796328"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
 
   const IDX_KEY = 'envios:index';
   const dayKey = iso => 'envios:daily:' + iso;
+
+  // El índice se guarda como { dates:[...] } porque Firestore no admite un
+  // array "suelto" como documento — necesita un objeto. Los snapshots
+  // diarios sí se guardan tal cual, un documento por fecha.
+  function refDeClave(key){
+    if(key === IDX_KEY) return db.collection('envios_index').doc('index');
+    const m = key.match(/^envios:daily:(.+)$/);
+    if(m) return db.collection('envios_daily').doc(m[1]);
+    throw new Error('Clave de storage desconocida: ' + key);
+  }
+
+  async function storeGet(key){
+    try{
+      const snap = await refDeClave(key).get();
+      if(!snap.exists) return null;
+      const data = snap.data();
+      return key === IDX_KEY ? (data.dates || []) : data;
+    }catch(e){ console.error('storeGet failed', key, e); return null; }
+  }
+  async function storeSet(key, value){
+    try{
+      const payload = key === IDX_KEY ? { dates: value } : value;
+      await refDeClave(key).set(payload);
+      return true;
+    }catch(e){ console.error('storeSet failed', key, e); return false; }
+  }
 
   // ======================================================================
   // Parseo del archivo LightData
@@ -1232,8 +1265,8 @@
   async function refreshIndex(){
     let idxRaw;
     try{
-      const r = await window.storage.get(IDX_KEY, true);
-      idxRaw = r ? JSON.parse(r.value) : [];
+      const snap = await refDeClave(IDX_KEY).get();
+      idxRaw = snap.exists ? (snap.data().dates || []) : [];
     }catch(e){
       // No se pudo leer el indice (puede ser que la clave todavia no
       // exista, o un fallo pasajero de red). Importante: NO tocamos
