@@ -20,6 +20,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Instalar LibreOffice (respaldo para .xls con BIFF corrupto)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-calc
+
       - name: Instalar dependencias
         working-directory: logistica-metricas/scripts
         run: |
