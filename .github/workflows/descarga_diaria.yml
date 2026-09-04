@@ -1,11 +1,16 @@
 name: Descarga diaria de LightData
 
-# Corre todos los días a las 03:00 UTC = 00:00 hora Argentina.
+# Objetivo: 03:00 UTC = 00:00 hora Argentina. Se programa en el minuto :17
+# en vez de en punto (:00) a propósito — los cron "en punto" son los que más
+# competencia tienen en la infraestructura de GitHub (todo el mundo programa
+# tareas justo a la hora exacta), lo que causaba demoras de ~2hs en la
+# práctica. Corriendo unos minutos después de la hora hay menos congestión.
+# GitHub igual no garantiza el minuto exacto, pero esto reduce la demora.
 # Además se puede disparar a mano desde la pestaña "Actions" del repo
 # (workflow_dispatch) para probarlo sin esperar al horario programado.
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "17 3 * * *"
   workflow_dispatch: {}
 
 jobs:
