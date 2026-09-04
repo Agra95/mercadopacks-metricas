@@ -190,11 +190,18 @@ Ya están cargados y el workflow corre solo — no hace falta ninguna acción
 manual salvo que alguno de los tres cambie (ej. se rota la contraseña de
 LightData) o LightData cambie el diseño de su página.
 
-**Cómo probarlo sin esperar al horario programado:** pestaña **Actions** del
-repo → workflow "Descarga diaria de LightData" → botón **"Run workflow"**. Si
-falla, el job sube como *artifact* descargable una captura de pantalla del
-momento del error (`error-descarga-lightdata`), para diagnosticar sin tener
-que repetirlo a mano.
+**Cómo probarlo sin esperar al horario programado, o rehacer un día puntual
+(backfill):** pestaña **Actions** del repo → workflow "Descarga diaria de
+LightData" → botón **"Run workflow"** → en el campo **"fecha"** poner la
+fecha a rehacer en formato `YYYY-MM-DD` (ej. `2026-09-01`) o dejarlo vacío
+para que traiga "ayer" como en la corrida normal. Esto es lo que hay que
+usar si un día quedó con datos calculados con una regla de negocio vieja
+(ej. antes de que se excluyera "A retirar" del % de efectividad): como el
+`.xls` crudo no se guarda en ningún lado, la única forma de corregir un día
+ya cargado es volver a descargarlo y recalcularlo así. Si la corrida falla,
+el job sube como *artifact* descargable una captura de pantalla del momento
+del error (`error-descarga-lightdata`), para diagnosticar sin tener que
+repetirlo a mano.
 
 **Limitación conocida:** el selector de fecha del calendario de LightData se
 probó seleccionando el día del mes directamente; si "ayer" cae en el mes
@@ -244,3 +251,4 @@ Ideas para las próximas iteraciones, en orden sugerido:
 | 2026-09-04 | Se trasladó el repositorio de la cuenta personal (`Agra95/mercadopacks-metricas`) a la organización `mercadopacks`, renombrado a `mercadopacks-metricas-diarias`. Nueva URL pública: **https://mercadopacks.github.io/mercadopacks-metricas-diarias/**. Los secrets de Actions y la configuración de GitHub Pages se mantuvieron intactos durante la transferencia. |
 | 2026-09-04 | Se sacó la carga manual de archivo del dashboard (botón, drag&drop, parseo de `.xls` en el navegador con la librería XLSX) — quedó redundante con la automatización diaria. El dashboard pasó a ser un lector puro de Firestore. |
 | 2026-09-04 | El % de entregas efectivas ahora excluye los envíos en estado "A retirar" del denominador (son envíos que todavía no llegaron al depósito), tanto en el KPI principal como en el ranking de choferes. Replicado en `publicar_firestore.py` y `generar_reporte.py` para mantener la paridad entre los tres lugares que calculan esta métrica. |
+| 2026-09-04 | Se agregó soporte para "backfill" manual: el workflow de descarga diaria ahora acepta una fecha puntual (input `fecha` en "Run workflow") para rehacer un día ya cargado con reglas de negocio viejas, dado que el `.xls` crudo no se guarda en ningún lado y no hay otra forma de recalcularlo. Necesario porque los días cargados antes del cambio de "A retirar" quedaron con el % de efectividad viejo. |

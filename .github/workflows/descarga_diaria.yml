@@ -11,7 +11,12 @@ name: Descarga diaria de LightData
 on:
   schedule:
     - cron: "17 3 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      fecha:
+        description: 'Fecha puntual a descargar (YYYY-MM-DD). Dejar vacío para descargar "ayer" (uso normal).'
+        required: false
+        default: ''
 
 jobs:
   descargar-y-publicar:
@@ -36,12 +41,13 @@ jobs:
           pip install -r requirements.txt
           playwright install --with-deps chromium
 
-      - name: Descargar export de LightData (día de ayer)
+      - name: Descargar export de LightData (día de ayer, o el que se indique en "fecha")
         id: descarga
         working-directory: logistica-metricas/scripts
         env:
           LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
           LIGHTDATA_PASS: ${{ secrets.LIGHTDATA_PASS }}
+          FECHA_DESCARGA: ${{ github.event.inputs.fecha }}
         run: |
           set -e
           SALIDA=$(python descargar_lightdata.py)

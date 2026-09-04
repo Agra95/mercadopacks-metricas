@@ -10,6 +10,12 @@ el .xls resultante a datos_crudos/.
 Uso:
     LIGHTDATA_USER=... LIGHTDATA_PASS=... python3 descargar_lightdata.py
 
+    Para descargar un día puntual en vez de "ayer" (backfill manual, por
+    ejemplo si un día quedó con datos viejos por un cambio de regla de
+    negocio), agregar FECHA_DESCARGA=YYYY-MM-DD:
+
+    LIGHTDATA_USER=... LIGHTDATA_PASS=... FECHA_DESCARGA=2026-09-01 python3 descargar_lightdata.py
+
 Pensado para correr sin supervisión (GitHub Actions), por eso:
 - Corre el navegador en modo headless.
 - Si algo falla, guarda una captura de pantalla para poder diagnosticar sin
@@ -51,9 +57,15 @@ def seleccionar_dia(page, dia: int):
     page.get_by_role("button", name=str(dia), exact=True).click()
 
 
-def descargar(usuario: str, clave: str) -> Path:
-    ayer = datetime.now(timezone.utc) - timedelta(days=1)
-    dia_ayer = ayer.day
+def descargar(usuario: str, clave: str, fecha_objetivo=None) -> Path:
+    """
+    Si no se pasa fecha_objetivo, descarga el día de "ayer" (uso normal,
+    corrida diaria). Si se pasa una fecha puntual (objeto date), la usa en
+    su lugar — pensado para backfill manual de días concretos (ver
+    FECHA_DESCARGA en main()).
+    """
+    fecha = fecha_objetivo or (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    dia = fecha.day
 
     CARPETA_SALIDA.mkdir(parents=True, exist_ok=True)
 
@@ -85,11 +97,11 @@ def descargar(usuario: str, clave: str) -> Path:
             page.get_by_role("link", name="menu Envios").click()
 
             page.get_by_role("textbox", name="Fecha desde/hasta").click()
-            seleccionar_dia(page, dia_ayer)
+            seleccionar_dia(page, dia)
             page.get_by_role("button", name="Ok").click()
 
             page.get_by_role("textbox", name="Hasta", exact=True).click()
-            seleccionar_dia(page, dia_ayer)
+            seleccionar_dia(page, dia)
             page.get_by_role("button", name="Ok").click()
 
             # Cierra un chip/tooltip que queda abierto tras elegir las
@@ -140,7 +152,15 @@ def main():
     if not usuario or not clave:
         sys.exit("Faltan las variables de entorno LIGHTDATA_USER / LIGHTDATA_PASS.")
 
-    destino = descargar(usuario, clave)
+    fecha_objetivo = None
+    fecha_str = os.environ.get("FECHA_DESCARGA", "").strip()
+    if fecha_str:
+        try:
+            fecha_objetivo = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+        except ValueError:
+            sys.exit(f"FECHA_DESCARGA debe tener formato YYYY-MM-DD, se recibió: {fecha_str!r}")
+
+    destino = descargar(usuario, clave, fecha_objetivo)
     print(f"Archivo descargado: {destino}")
 
 
