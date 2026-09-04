@@ -40,6 +40,7 @@ from openpyxl.utils import get_column_letter
 
 ESTADOS_ENTREGA_EFECTIVA = {"Entregado", "Entregado 2DA visita"}
 ESTADOS_CANCELADO = {"Cancelado", "Rechazado por el comprador"}
+ESTADO_A_RETIRAR = "A retirar"  # se excluye del denominador de % efectividad
 HORA_CORTE = 21  # "antes de las 21hs" -> hora(Fecha estado) < HORA_CORTE
 COLUMNA_TIMESTAMP_ENTREGA = "Fecha estado"
 MIN_ENVIOS_PARA_RANKING_CONFIABLE = 5  # por debajo de esto, se marca la fila
@@ -138,6 +139,7 @@ def procesar(df: pd.DataFrame) -> pd.DataFrame:
 
     df["es_entrega_efectiva"] = df["Estado"].isin(ESTADOS_ENTREGA_EFECTIVA)
     df["es_cancelado"] = df["Estado"].isin(ESTADOS_CANCELADO)
+    df["es_a_retirar"] = df["Estado"] == ESTADO_A_RETIRAR
     df["tiene_chofer"] = df["Cadete"] != ""
 
     df["es_antes_de_corte"] = (
@@ -157,12 +159,18 @@ def calcular_resumen(df: pd.DataFrame) -> pd.DataFrame:
     total = len(df)
     entregas_efectivas = int(df["es_entrega_efectiva"].sum())
     cancelados = int(df["es_cancelado"].sum())
+    a_retirar = int(df["es_a_retirar"].sum())
     antes_de_corte = int(df["es_antes_de_corte"].sum())
-    otros = total - entregas_efectivas - cancelados
+    # "A retirar" son envios que todavia no llegaron al deposito — no
+    # corresponde contarlos en el universo de entregas para el % de
+    # efectividad (reglas_de_negocio.md, regla #1).
+    total_para_efectividad = total - a_retirar
+    otros = total - entregas_efectivas - cancelados - a_retirar
 
     filas = [
         ("Total de envios en el periodo", total, None),
-        ("Entregas efectivas", entregas_efectivas, _pct(entregas_efectivas, total)),
+        ("A retirar (aun no llegaron al deposito, se excluyen del % de efectividad)", a_retirar, _pct(a_retirar, total)),
+        ("Entregas efectivas", entregas_efectivas, _pct(entregas_efectivas, total_para_efectividad)),
         (f"Entregas antes de las {HORA_CORTE}hs (sobre entregas efectivas)", antes_de_corte, _pct(antes_de_corte, entregas_efectivas)),
         (f"Entregas antes de las {HORA_CORTE}hs (sobre total de envios)", antes_de_corte, _pct(antes_de_corte, total)),
         ("Cancelados / rechazados", cancelados, _pct(cancelados, total)),
@@ -180,9 +188,13 @@ def calcular_por_chofer(df: pd.DataFrame) -> pd.DataFrame:
         entregas_efectivas=("es_entrega_efectiva", "sum"),
         antes_de_corte=("es_antes_de_corte", "sum"),
         cancelados=("es_cancelado", "sum"),
+        a_retirar=("es_a_retirar", "sum"),
     ).reset_index()
 
-    agg["% efectividad"] = (agg["entregas_efectivas"] / agg["total_asignados"] * 100).round(1)
+    # % efectividad excluye "A retirar" del denominador (regla de negocio #1).
+    agg["% efectividad"] = (
+        agg["entregas_efectivas"] / (agg["total_asignados"] - agg["a_retirar"]) * 100
+    ).round(1)
     agg["% antes de corte (s/ entregas)"] = (
         agg["antes_de_corte"] / agg["entregas_efectivas"].replace(0, np.nan) * 100
     ).round(1)
@@ -196,6 +208,7 @@ def calcular_por_chofer(df: pd.DataFrame) -> pd.DataFrame:
         "entregas_efectivas": pd.NA,
         "antes_de_corte": pd.NA,
         "cancelados": pd.NA,
+        "a_retirar": pd.NA,
         "% efectividad": pd.NA,
         "% antes de corte (s/ entregas)": pd.NA,
         "muestra_chica": pd.NA,
@@ -210,8 +223,12 @@ def calcular_por_zona(df: pd.DataFrame) -> pd.DataFrame:
         entregas_efectivas=("es_entrega_efectiva", "sum"),
         antes_de_corte=("es_antes_de_corte", "sum"),
         cancelados=("es_cancelado", "sum"),
+        a_retirar=("es_a_retirar", "sum"),
     ).reset_index()
-    agg["% efectividad"] = (agg["entregas_efectivas"] / agg["total"] * 100).round(1)
+    # % efectividad excluye "A retirar" del denominador (regla de negocio #1).
+    agg["% efectividad"] = (
+        agg["entregas_efectivas"] / (agg["total"] - agg["a_retirar"]) * 100
+    ).round(1)
     agg["% cancelados"] = (agg["cancelados"] / agg["total"] * 100).round(1)
     return agg.sort_values("total", ascending=False).reset_index(drop=True)
 

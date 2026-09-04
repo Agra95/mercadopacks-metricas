@@ -12,7 +12,7 @@ implementan estas reglas por separado (no comparten código entre sí):
   calcula las franjas horarias y los agregados por su cuenta, replicando la
   misma lógica que el dashboard.
 
-Última actualización: 2026-09-02.
+Última actualización: 2026-09-04.
 
 ---
 
@@ -29,9 +29,15 @@ uno de los siguientes:
 reportes — no suman ni restan en el % de efectividad hasta que se decida
 dónde van.
 
+**`A retirar` se excluye también, pero del *denominador*, no solo del
+numerador** (agregado 2026-09-04): son envíos que todavía no llegaron al
+depósito, así que no corresponde contarlos en el universo de envíos
+gestionados para medir efectividad — inflarían artificialmente el total sin
+haber tenido chance de ser entregados todavía.
+
 **Fórmula:**
 ```
-% Entregas efectivas = (envíos con Estado en {Entregado, Entregado 2DA visita}) / (total de envíos) × 100
+% Entregas efectivas = (envíos con Estado en {Entregado, Entregado 2DA visita}) / (total de envíos − envíos en A retirar) × 100
 ```
 
 ---
@@ -239,3 +245,5 @@ prestaría a confusión entre "esto es un botón" y "esto está tardando".
 | 2026-09-02 | Se sacó el recorte de 06:00–23:00 del gráfico de entregas por hora (vuelve a mostrar 00–23). |
 | 2026-09-02 | Se agregaron las 4 franjas horarias (antes de 21 / 21-22 / 22-23 / después de 23), el cruce por estado, y la columna "Pendientes" (Envíos − Efectivas) en el ranking de choferes. Se agregaron filtros interactivos por zona, franja horaria y chofer. Se re-tematizó el dashboard con la paleta de marca (dorado/negro del logo) separada del semáforo de puntualidad (verde/amarillo/rojo). |
 | 2026-09-02 | El cruce por hora de entrega ahora desglosa **todos** los valores de `Estado` (antes solo mostraba `Entregado` y `Entregado 2DA visita`) — ver excepción agregada al punto 8. El ranking de choferes reemplazó la columna "Después de 21hs" por las 4 franjas horarias individuales (cantidad de entregas antes de 21 / 21-22 / 22-23 / después de 23 por chofer). Al cargar un archivo, el panel se posiciona automáticamente en el rango de fechas que trae ese archivo (antes solo pasaba si el archivo incluía el día de hoy). |
+| 2026-09-04 | Regla #1: el % de entregas efectivas ahora excluye los envíos en estado `A retirar` del **denominador** (antes solo se excluían del numerador, junto con `Retirado`/`Nadie`/`Nadie 2DA visita`), porque son envíos que todavía no llegaron al depósito. Se agregó el contador `aRetirar` a nivel global/zona/chofer en el snapshot que arma `publicar_firestore.py`, y se replicó en `generar_reporte.py`. |
+| 2026-09-04 | Se sacó la carga manual de archivo del dashboard (botón, drag&drop, parseo de .xls en el navegador) porque quedó redundante con la automatización diaria — el dashboard ahora es un lector puro de Firestore, ya no procesa archivos por su cuenta. |

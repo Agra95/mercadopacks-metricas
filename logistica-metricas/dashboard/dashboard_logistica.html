@@ -4,7 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Seguimiento de envíos - Mercadopacks</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
@@ -105,20 +104,6 @@
     border-radius:7px; padding:5px 8px; font-size:12.5px; font-family:inherit;
   }
   .range-inputs span{ color:var(--text-muted); font-size:12px; }
-
-  .upload-zone{
-    display:flex; align-items:center; gap:10px; background:var(--panel);
-    border:1px dashed var(--border); border-radius:10px; padding:9px 14px;
-  }
-  .upload-zone.dragging{ border-color:var(--gold); background:var(--gold-soft); }
-  .upload-zone label.filebtn{
-    background:var(--gold); color:var(--gold-ink); border-radius:7px; padding:6px 12px;
-    font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;
-  }
-  .upload-zone input[type=file]{ display:none; }
-  .upload-status{ font-size:12.5px; color:var(--text-muted); max-width:280px; }
-  .upload-status.ok{ color:var(--verde); }
-  .upload-status.err{ color:var(--rojo); }
 
   /* ---------- kpis ---------- */
   .kpis{ display:grid; grid-template-columns:repeat(2, 1fr); gap:14px; margin-bottom:24px; }
@@ -322,12 +307,6 @@
         <input type="date" id="rangeEnd" aria-label="Fecha de fin del rango" />
       </div>
     </div>
-
-    <div class="upload-zone" id="uploadZone">
-      <label class="filebtn" for="fileInput">Cargar export de LightData</label>
-      <input type="file" id="fileInput" accept=".xls,.xlsx" />
-      <span class="upload-status" id="uploadStatus">Aceptamos el .xls tal cual lo baja el sistema.</span>
-    </div>
   </div>
 
   <div id="mainContent">
@@ -337,7 +316,7 @@
   <template id="tplEmpty">
     <div class="empty-state">
       <h2>Todavía no hay envíos cargados</h2>
-      <p>Subí el export de LightData del día (botón de arriba) para que aparezcan las métricas acá. Una vez cargado, cualquiera que abra este panel va a ver los mismos datos.</p>
+      <p>Los datos se cargan solos todos los días a las 00hs. Si no aparece nada acá, esperá a la próxima carga automática o revisá la automatización en GitHub Actions.</p>
     </div>
   </template>
 
@@ -413,7 +392,7 @@
   </div>
 
   <div class="footer" id="footerInfo" hidden>
-    <p><strong>Cómo se define cada métrica:</strong> entrega efectiva = estado "Entregado" o "Entregado 2DA visita" · antes de las 21hs = de las entregas efectivas, hora de "Fecha estado" menor a 21:00 · cancelado = "Cancelado" o "Rechazado por el comprador". Definiciones completas en <em>reglas_de_negocio.md</em>.</p>
+    <p><strong>Cómo se define cada métrica:</strong> entrega efectiva = estado "Entregado" o "Entregado 2DA visita" · % efectividad = entregas efectivas / (total − "A retirar") · antes de las 21hs = de las entregas efectivas, hora de "Fecha estado" menor a 21:00 · cancelado = "Cancelado" o "Rechazado por el comprador". Definiciones completas en <em>reglas_de_negocio.md</em>.</p>
     <p>Los datos se comparten entre todas las personas que abren este panel. Se refresca solo cada ~45&nbsp;segundos; tocá «Actualizar» para forzarlo al toque.</p>
     <div class="coverage" id="coverage"></div>
   </div>
@@ -429,8 +408,6 @@
   // ======================================================================
   // Reglas de negocio (deben coincidir con reglas_de_negocio.md)
   // ======================================================================
-  const ESTADOS_ENTREGA_EFECTIVA = new Set(['Entregado', 'Entregado 2DA visita']);
-  const ESTADOS_CANCELADO = new Set(['Cancelado', 'Rechazado por el comprador']);
   const HORA_CORTE = 21;
   const MIN_MUESTRA = 5;
   const POLL_MS = 45000;
@@ -467,19 +444,6 @@
     dt.setDate(dt.getDate()-n);
     return fmtISO(dt);
   }
-  function parseFechaHora(str){
-    if(!str) return null;
-    const m = String(str).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
-    if(!m) return null;
-    const dd=+m[1], mo=+m[2], yy=+m[3], hh=+m[4], mi=+m[5];
-    return new Date(yy, mo-1, dd, hh, mi);
-  }
-  function parseFechaSolo(str){
-    if(!str) return null;
-    const m = String(str).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if(!m) return null;
-    return m[3] + '-' + pad(+m[2]) + '-' + pad(+m[1]);
-  }
   function pct(a,b){ if(!b) return null; return Math.round((a/b)*1000)/10; }
   function fmtPct(v){ return (v===null || v===undefined || isNaN(v)) ? '—' : v.toFixed(1)+'%'; }
   function fmtNum(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : new Intl.NumberFormat('es-AR').format(v); }
@@ -491,8 +455,8 @@
   // Pages), el guardado compartido entre todo el equipo pasa por acá.
   //
   // Se mantiene la misma firma storeGet/storeSet(key, ...) que usa el resto
-  // del código (aggregate, render, handleFile, etc.) para no tener que
-  // tocar nada más: solo cambia CÓMO se resuelve cada clave puertas adentro.
+  // del código (aggregate, render, etc.) para no tener que tocar nada más:
+  // solo cambia CÓMO se resuelve cada clave puertas adentro.
   // ======================================================================
   const firebaseConfig = {
     apiKey: "AIzaSyBCU3r90PL-zT72pS6FWocgGJuVf8X0niA",
@@ -532,114 +496,6 @@
       await refDeClave(key).set(payload);
       return true;
     }catch(e){ console.error('storeSet failed', key, e); return false; }
-  }
-
-  // ======================================================================
-  // Parseo del archivo LightData
-  // ======================================================================
-  function encontrarFilaHeader(rows){
-    for(let i=0;i<Math.min(20,rows.length);i++){
-      const v = rows[i] && rows[i][0];
-      if(typeof v === 'string' && v.trim() === 'ID (Interno)') return i;
-    }
-    return -1;
-  }
-
-  function procesarArchivo(arrayBuffer){
-    const wb = XLSX.read(arrayBuffer, { type:'array', codepage:1252 });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:null });
-
-    const filaHeader = encontrarFilaHeader(rows);
-    if(filaHeader === -1) throw new Error("No se encontró la fila de encabezado ('ID (Interno)'). ¿Cambió el formato del export?");
-
-    const headers = rows[filaHeader].map(h => (h||'').toString().trim());
-    const idx = name => headers.indexOf(name);
-
-    const iID = idx('ID (Interno)');
-    const iEstado = idx('Estado');
-    const iCadete = idx('Cadete');
-    const iZona = idx('Zona');
-    const iFechaEstado = idx('Fecha estado');
-    const iFechaMP = idx('Fecha MercadoPacks');
-
-    if([iID,iEstado,iCadete,iZona,iFechaEstado,iFechaMP].some(i => i===-1)){
-      throw new Error('Faltan columnas esperadas en el archivo. Revisá diccionario_de_datos.md.');
-    }
-
-    const dataRows = rows.slice(filaHeader+1).filter(r => r && r[iID] !== null && r[iID] !== '');
-    if(dataRows.length === 0) throw new Error('El archivo no tiene filas de datos.');
-
-    // Agrupar por fecha operativa (Fecha MercadoPacks) -> uno o más snapshots diarios
-    const porDia = {};
-    for(const r of dataRows){
-      const fechaOperativa = parseFechaSolo(r[iFechaMP]) || parseFechaSolo(r[iFechaEstado]);
-      if(!fechaOperativa) continue; // fila sin fecha utilizable, se descarta
-      if(!porDia[fechaOperativa]) porDia[fechaOperativa] = [];
-      porDia[fechaOperativa].push(r);
-    }
-
-    const snapshots = {};
-    for(const [fecha, filas] of Object.entries(porDia)){
-      let total=0, efectivas=0, cancelados=0, sinChofer=0;
-      const porHora = new Array(24).fill(0);
-      const buckets = nuevosBuckets();
-      const porEstadoHora = {}; // estado (Entregado / Entregado 2DA visita) -> buckets
-      const porChofer = {};
-      const porZona = {};
-
-      for(const r of filas){
-        total++;
-        const estado = (r[iEstado]||'').toString().trim();
-        const cadete = (r[iCadete]||'').toString().trim();
-        const zona = (r[iZona]||'').toString().trim() || 'Sin zona';
-        const esEfectiva = ESTADOS_ENTREGA_EFECTIVA.has(estado);
-        const esCancel = ESTADOS_CANCELADO.has(estado);
-        const fh = parseFechaHora(r[iFechaEstado]);
-        const horaBucket = fh !== null ? bucketDeHora(fh.getHours()) : null;
-        // Los buckets "oficiales" (globales, por zona, por chofer) siguen
-        // siendo solo sobre entregas efectivas, como define la regla de
-        // negocio #8. El cruce por estado (porEstadoHora) es la excepcion:
-        // ahi se quiere ver TODOS los estados (reprogramado, cancelado,
-        // etc.), no solo los dos de entrega efectiva.
-        const bucket = esEfectiva ? horaBucket : null;
-
-        if(esEfectiva){
-          efectivas++;
-          if(fh) porHora[fh.getHours()]++;
-          if(bucket) buckets[bucket]++;
-        }
-        if(esCancel) cancelados++;
-
-        if(horaBucket){
-          if(!porEstadoHora[estado]) porEstadoHora[estado] = nuevosBuckets();
-          porEstadoHora[estado][horaBucket]++;
-        }
-
-        if(!cadete){
-          sinChofer++;
-        }else{
-          if(!porChofer[cadete]) porChofer[cadete] = { total:0, efectivas:0, cancelados:0, buckets:nuevosBuckets(), porZona:{} };
-          const pc = porChofer[cadete];
-          pc.total++; if(esEfectiva) pc.efectivas++; if(esCancel) pc.cancelados++;
-          if(bucket) pc.buckets[bucket]++;
-          pc.porZona[zona] = (pc.porZona[zona]||0) + 1;
-        }
-
-        if(!porZona[zona]) porZona[zona] = { total:0, efectivas:0, cancelados:0, buckets:nuevosBuckets() };
-        const pz = porZona[zona];
-        pz.total++; if(esEfectiva) pz.efectivas++; if(esCancel) pz.cancelados++;
-        if(bucket) pz.buckets[bucket]++;
-      }
-
-      snapshots[fecha] = {
-        fecha, cargadoEn: new Date().toISOString(),
-        total, efectivas, cancelados, sinChofer,
-        buckets, porEstadoHora, porHora, porChofer, porZona,
-      };
-    }
-
-    return snapshots;
   }
 
   // ======================================================================
@@ -718,12 +574,12 @@
   function aggregate(dates){
     const snaps = dates.map(d => state.cache[d]).filter(Boolean);
     const agg = {
-      total:0, efectivas:0, cancelados:0, sinChofer:0,
+      total:0, efectivas:0, cancelados:0, sinChofer:0, aRetirar:0,
       buckets:nuevosBuckets(), porEstadoHora:{}, porChofer:{}, porZona:{},
     };
     for(const s of snaps){
       agg.total += s.total; agg.efectivas += s.efectivas; agg.cancelados += s.cancelados;
-      agg.sinChofer += s.sinChofer;
+      agg.sinChofer += s.sinChofer; agg.aRetirar += (s.aRetirar||0);
       sumarBuckets(agg.buckets, s.buckets || {});
 
       for(const [estado, b] of Object.entries(s.porEstadoHora || {})){
@@ -732,16 +588,18 @@
       }
 
       for(const [k,v] of Object.entries(s.porChofer||{})){
-        if(!agg.porChofer[k]) agg.porChofer[k] = { total:0, efectivas:0, cancelados:0, buckets:nuevosBuckets(), porZona:{} };
+        if(!agg.porChofer[k]) agg.porChofer[k] = { total:0, efectivas:0, cancelados:0, aRetirar:0, buckets:nuevosBuckets(), porZona:{} };
         const dst = agg.porChofer[k];
         dst.total += v.total; dst.efectivas += v.efectivas; dst.cancelados += v.cancelados;
+        dst.aRetirar += (v.aRetirar||0);
         sumarBuckets(dst.buckets, v.buckets || {});
         for(const [zona, n] of Object.entries(v.porZona || {})) dst.porZona[zona] = (dst.porZona[zona]||0) + n;
       }
       for(const [k,v] of Object.entries(s.porZona||{})){
-        if(!agg.porZona[k]) agg.porZona[k] = { total:0, efectivas:0, cancelados:0, buckets:nuevosBuckets() };
+        if(!agg.porZona[k]) agg.porZona[k] = { total:0, efectivas:0, cancelados:0, aRetirar:0, buckets:nuevosBuckets() };
         const dst = agg.porZona[k];
         dst.total += v.total; dst.efectivas += v.efectivas; dst.cancelados += v.cancelados;
+        dst.aRetirar += (v.aRetirar||0);
         sumarBuckets(dst.buckets, v.buckets || {});
       }
     }
@@ -815,8 +673,12 @@
     document.getElementById('kpiTotal').textContent = fmtNum(scope.total);
     document.getElementById('kpiTotalFoot').textContent = dates.length + (dates.length===1 ? ' día' : ' días') + ' seleccionado' + (dates.length===1?'':'s');
 
-    document.getElementById('kpiEfectiva').textContent = fmtPct(pct(scope.efectivas, scope.total));
-    document.getElementById('kpiEfectivaFoot').textContent = fmtNum(scope.efectivas) + ' de ' + fmtNum(scope.total);
+    // % efectividad se calcula sobre el total MENOS los envíos "A retirar"
+    // (todavía no llegaron al depósito, no corresponde contarlos en el
+    // universo de entregas — ver reglas_de_negocio.md, regla #1).
+    const totalParaEfectividad = scope.total - (scope.aRetirar || 0);
+    document.getElementById('kpiEfectiva').textContent = fmtPct(pct(scope.efectivas, totalParaEfectividad));
+    document.getElementById('kpiEfectivaFoot').textContent = fmtNum(scope.efectivas) + ' de ' + fmtNum(totalParaEfectividad);
 
     const bucketActivo = BUCKETS.find(b => b.key === (state.filtroBucket || 'antes21'));
     const valBucket = (scope.buckets && scope.buckets[bucketActivo.key]) || 0;
@@ -1172,7 +1034,9 @@
     let filas = Object.entries(agg.porChofer).map(([cadete, v]) => ({
       cadete, total:v.total, efectivas:v.efectivas, cancelados:v.cancelados,
       pendientes: v.total - v.efectivas,
-      pctEfectividad: pct(v.efectivas, v.total),
+      // % efectividad excluye "A retirar" del denominador (regla de
+      // negocio #1) — ver misma nota en el KPI principal.
+      pctEfectividad: pct(v.efectivas, v.total - (v.aRetirar || 0)),
       pctAntes: pct((v.buckets && v.buckets.antes21) || 0, v.efectivas),
       antes21: (v.buckets && v.buckets.antes21) || 0,
       e21_22: (v.buckets && v.buckets.e21_22) || 0,
@@ -1354,70 +1218,6 @@
     else { state.sort.key = key; state.sort.dir = 'desc'; }
     await render();
   });
-
-  const fileInput = document.getElementById('fileInput');
-  const uploadStatus = document.getElementById('uploadStatus');
-  const uploadZone = document.getElementById('uploadZone');
-
-  fileInput.addEventListener('change', (e)=>{
-    if(e.target.files[0]) handleFile(e.target.files[0]);
-  });
-  ['dragenter','dragover'].forEach(ev => uploadZone.addEventListener(ev, e=>{ e.preventDefault(); uploadZone.classList.add('dragging'); }));
-  ['dragleave','drop'].forEach(ev => uploadZone.addEventListener(ev, e=>{ e.preventDefault(); uploadZone.classList.remove('dragging'); }));
-  uploadZone.addEventListener('drop', e=>{
-    const f = e.dataTransfer.files[0];
-    if(f) handleFile(f);
-  });
-
-  async function handleFile(file){
-    uploadStatus.className = 'upload-status';
-    uploadStatus.textContent = 'Leyendo ' + file.name + '…';
-    try{
-      const buf = await file.arrayBuffer();
-      const snapshots = procesarArchivo(buf);
-      const fechas = Object.keys(snapshots).sort();
-      if(fechas.length === 0) throw new Error('No se pudo determinar la fecha de los envíos en el archivo.');
-
-      for(const fecha of fechas){
-        await storeSet(dayKey(fecha), snapshots[fecha], true);
-      }
-      // Si por algun motivo no se puede leer el indice actual, usamos el
-      // que ya teniamos en memoria como base — nunca asumimos "vacio",
-      // porque eso terminaria GUARDANDO un indice vacio y borrando fechas
-      // que otra persona ya habia cargado antes.
-      const idxActual = (await storeGet(IDX_KEY, true)) || state.index || [];
-      const nuevoIdx = Array.from(new Set([...idxActual, ...state.index, ...fechas])).sort();
-      await storeSet(IDX_KEY, nuevoIdx, true);
-
-      state.index = nuevoIdx;
-      fechas.forEach(f => { state.cache[f] = snapshots[f]; });
-      state.lastUpdated = new Date();
-      setStatus(true);
-
-      uploadStatus.className = 'upload-status ok';
-      uploadStatus.textContent = 'Archivo cargado correctamente.';
-      toast('Archivo cargado correctamente.');
-
-      // El panel se posiciona siempre en el rango de fechas que trae el
-      // archivo recién cargado (de la primera a la última fecha), para que
-      // quien sube el archivo vea de entrada los datos que acaba de subir
-      // sin tener que tocar el selector de período a mano.
-      state.period = 'rango';
-      state.rangeStart = fechas[0];
-      state.rangeEnd = fechas[fechas.length-1];
-      setChip('rango');
-      document.getElementById('rangeStart').value = state.rangeStart;
-      document.getElementById('rangeEnd').value = state.rangeEnd;
-      await render();
-    }catch(err){
-      console.error(err);
-      uploadStatus.className = 'upload-status err';
-      uploadStatus.textContent = 'Error: ' + err.message;
-      toast('No se pudo procesar el archivo: ' + err.message, true);
-    }finally{
-      fileInput.value = '';
-    }
-  }
 
   init();
 })();

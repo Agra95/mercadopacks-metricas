@@ -59,7 +59,7 @@ que aparece una columna nueva o cambia el significado de una existente.
 | `Cancelado` | Envío cancelado | Cancelado |
 | `Rechazado por el comprador` | El destinatario rechazó el paquete | Cancelado |
 | `En planta de procesamiento` | Aún en depósito, sin salir a reparto | En curso |
-| `A retirar` | Pendiente de retiro en sucursal por el destinatario | En curso |
+| `A retirar` | Envío que todavía no llegó al depósito (no entró al circuito de reparto) | En curso — excluido también del *denominador* del % de efectividad, no solo del numerador (ver reglas_de_negocio.md, regla #1) |
 | `En camino al destinatario` | En reparto | En curso |
 | `En camino reprogramado` | En reparto, pero con entrega reprogramada | En curso |
 | `reprogramado por meli` | Reprogramado por decisión de Mercado Libre | En curso |
@@ -69,6 +69,11 @@ que aparece una columna nueva o cambia el significado de una existente.
 
 ## Preguntas abiertas / pendientes de definir
 
+- **Corrección 2026-09-04:** la descripción de `A retirar` decía antes
+  "pendiente de retiro en sucursal por el destinatario" — se corrigió a
+  "todavía no llegó al depósito" a partir de la aclaración del equipo, que
+  también definió que debe excluirse del denominador del % de efectividad
+  (ver reglas_de_negocio.md, regla #1).
 - `Retirado`, `Nadie` y `Nadie 2DA visita` todavía no están clasificados en
   ninguna categoría de negocio — no se usan en las métricas actuales del
   script hasta que se definan (quedan en la categoría genérica "otros / en

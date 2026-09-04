@@ -73,11 +73,9 @@ correr nada ni saber Python. Es un único archivo HTML que se abre en
 cualquier navegador.
 
 **Qué hace:**
-- Arrastrás o seleccionás el `.xls` tal cual lo baja LightData y lo procesa
-  ahí mismo, en el navegador (no hace falta convertirlo ni tocar nada antes).
-- Agrupa los envíos por día automáticamente (usa la columna `Fecha
-  MercadoPacks`), así que si subís un archivo que trae varios días juntos,
-  igual separa las métricas por fecha correctamente.
+- Es un lector puro de Firestore — no procesa archivos en el navegador. Los
+  datos los carga la automatización diaria (ver más abajo); el dashboard
+  solo se encarga de mostrarlos.
 - Muestra tarjetas de KPIs (total de envíos, % entregas efectivas, franja
   horaria de entrega, % cancelados), un gráfico de evolución o de entregas
   por hora según el período elegido, el cruce de entregas por franja
@@ -88,19 +86,20 @@ cualquier navegador.
   (con Pendientes, la cantidad de entregas en cada una de las 4 franjas
   horarias, buscador y orden por columna).
 - Tiene selector de período: Hoy, Ayer, Últimos 7 días, Últimos 30 días, o
-  un rango de fechas a elección. Al cargar un archivo, el panel salta solo
-  al rango de fechas que trae ese archivo.
+  un rango de fechas a elección. Al abrir el panel, elige automáticamente
+  "Hoy" si ya hay datos del día, si no "Ayer", y si no el último día
+  disponible.
 - **Es interactivo:** hacer click en una zona, en una franja horaria del
   cruce, o en un chofer del ranking filtra el resto del panel a esa
   selección (con un aviso claro de qué filtro está activo y un botón para
   limpiarlo). Los detalles exactos de qué se puede cruzar con qué están en
   `reglas_de_negocio.md`, sección 9.
 
-**Cómo se comparte con el equipo:** los datos que se cargan quedan guardados
-en una base de datos compartida (Firebase Firestore) — **cualquier persona
-que entre a la URL pública ve los mismos datos**, no hace falta que cada uno
-suba el archivo por su cuenta. Alcanza con que una persona cargue el export
-del día una vez.
+**Cómo se comparte con el equipo:** los datos quedan guardados en una base de
+datos compartida (Firebase Firestore), cargados automáticamente todos los
+días por la automatización (ver sección más abajo) — **cualquier persona que
+entre a la URL pública ve los mismos datos**, sin que nadie tenga que subir
+nada a mano.
 
 **Dónde vive publicado:** el dashboard está alojado gratis en GitHub Pages,
 en **https://mercadopacks.github.io/mercadopacks-metricas-diarias/** (repo:
@@ -127,12 +126,14 @@ filtrarse fuera del equipo habría que revisar esto (agregar autenticación o
 cerrar las reglas).
 
 **Qué NO hace (para que no haya sorpresas):**
-- No se conecta solo al sistema de LightData todavía — alguien tiene que
-  descargar el `.xls` y arrastrarlo al dashboard. La automatización de esto
-  (descarga diaria a las 00hs) está en desarrollo, ver backlog más abajo.
-- No es "tiempo real" en el sentido de que empuje cambios al instante:
-  cuando alguien carga un archivo nuevo, el panel se refresca solo cada
-  ~45 segundos para el resto de las personas que lo tengan abierto (o
+- No tiene forma de cargar un archivo a mano — se sacó el botón de carga
+  manual porque quedó redundante con la automatización diaria (ver más
+  abajo). Si algún día la automatización falla y hace falta cargar un día
+  puntual "a mano", hoy no hay una vía en el dashboard para eso (habría que
+  reactivar ese código o correr `publicar_firestore.py` manualmente con el
+  archivo correspondiente).
+- No es "tiempo real" en el sentido de que empuje cambios al instante: el
+  panel se refresca solo cada ~45 segundos para quienes lo tengan abierto (o
   pueden tocar "Actualizar" para forzarlo ya mismo). Para una métrica diaria
   esto es más que suficiente.
 - Las definiciones de negocio están duplicadas a propósito en este archivo
@@ -241,3 +242,5 @@ Ideas para las próximas iteraciones, en orden sugerido:
 | 2026-09-02 | Automatización de la descarga diaria: `scripts/descargar_lightdata.py` (Playwright) inicia sesión en LightData y descarga el export de "ayer", `scripts/publicar_firestore.py` calcula el mismo snapshot que el dashboard y lo publica en Firestore, orquestados por `.github/workflows/descarga_diaria.yml` (cron 00hs ART). Se cargaron los secrets y se probó de punta a punta con éxito: la automatización queda operativa. |
 | 2026-09-03 | Se cambió el cron de la automatización de `0 3 * * *` a `17 3 * * *` (correr unos minutos después de la hora en punto, no justo a las :00) para reducir la demora observada (~2hs) causada por la congestión típica de GitHub Actions en los horarios "en punto". |
 | 2026-09-04 | Se trasladó el repositorio de la cuenta personal (`Agra95/mercadopacks-metricas`) a la organización `mercadopacks`, renombrado a `mercadopacks-metricas-diarias`. Nueva URL pública: **https://mercadopacks.github.io/mercadopacks-metricas-diarias/**. Los secrets de Actions y la configuración de GitHub Pages se mantuvieron intactos durante la transferencia. |
+| 2026-09-04 | Se sacó la carga manual de archivo del dashboard (botón, drag&drop, parseo de `.xls` en el navegador con la librería XLSX) — quedó redundante con la automatización diaria. El dashboard pasó a ser un lector puro de Firestore. |
+| 2026-09-04 | El % de entregas efectivas ahora excluye los envíos en estado "A retirar" del denominador (son envíos que todavía no llegaron al depósito), tanto en el KPI principal como en el ranking de choferes. Replicado en `publicar_firestore.py` y `generar_reporte.py` para mantener la paridad entre los tres lugares que calculan esta métrica. |

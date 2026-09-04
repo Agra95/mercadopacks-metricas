@@ -2,10 +2,10 @@
 """
 publicar_firestore.py
 ----------------------
-Toma un export crudo de LightData (.xls/.xlsx), calcula el mismo snapshot
-diario que arma el dashboard en el navegador (función `procesarArchivo` de
-dashboard_logistica.html) y lo publica en Firestore — así el dashboard lo ve
-sin que nadie tenga que arrastrar el archivo a mano.
+Toma un export crudo de LightData (.xls/.xlsx), calcula el snapshot diario
+que consume el dashboard (mismo formato que antes armaba `procesarArchivo`
+en el navegador, función que ya no existe — el dashboard es hoy un lector
+puro de Firestore) y lo publica en Firestore.
 
 Las reglas de negocio (qué es una entrega efectiva, qué es un cancelado, el
 corte horario, a qué día pertenece cada envío) son las mismas que usan
@@ -89,7 +89,7 @@ def calcular_snapshots(df: pd.DataFrame) -> dict:
         snap = snapshots.setdefault(fecha, {
             "fecha": fecha,
             "cargadoEn": datetime.now(timezone.utc).isoformat(),
-            "total": 0, "efectivas": 0, "cancelados": 0, "sinChofer": 0,
+            "total": 0, "efectivas": 0, "cancelados": 0, "sinChofer": 0, "aRetirar": 0,
             "buckets": nuevos_buckets(),
             "porEstadoHora": {},
             "porHora": [0] * 24,
@@ -102,6 +102,10 @@ def calcular_snapshots(df: pd.DataFrame) -> dict:
         zona = str(fila["Zona"])
         es_efectiva = bool(fila["es_entrega_efectiva"])
         es_cancel = bool(fila["es_cancelado"])
+        # "A retirar" = todavía no llegó al depósito, no corresponde
+        # contarlo en el universo de entregas para el % de efectividad
+        # (reglas_de_negocio.md, regla #1).
+        es_a_retirar = estado == "A retirar"
 
         dt = fila.get("_fecha_estado_dt")
         hora = dt.hour if dt is not None and not pd.isna(dt) else None
@@ -120,6 +124,8 @@ def calcular_snapshots(df: pd.DataFrame) -> dict:
                 sumar_bucket(snap["buckets"], bucket)
         if es_cancel:
             snap["cancelados"] += 1
+        if es_a_retirar:
+            snap["aRetirar"] += 1
 
         if hora_bucket:
             eb = snap["porEstadoHora"].setdefault(estado, nuevos_buckets())
@@ -129,7 +135,7 @@ def calcular_snapshots(df: pd.DataFrame) -> dict:
             snap["sinChofer"] += 1
         else:
             pc = snap["porChofer"].setdefault(cadete, {
-                "total": 0, "efectivas": 0, "cancelados": 0,
+                "total": 0, "efectivas": 0, "cancelados": 0, "aRetirar": 0,
                 "buckets": nuevos_buckets(), "porZona": {},
             })
             pc["total"] += 1
@@ -137,18 +143,22 @@ def calcular_snapshots(df: pd.DataFrame) -> dict:
                 pc["efectivas"] += 1
             if es_cancel:
                 pc["cancelados"] += 1
+            if es_a_retirar:
+                pc["aRetirar"] += 1
             if bucket:
                 sumar_bucket(pc["buckets"], bucket)
             pc["porZona"][zona] = pc["porZona"].get(zona, 0) + 1
 
         pz = snap["porZona"].setdefault(zona, {
-            "total": 0, "efectivas": 0, "cancelados": 0, "buckets": nuevos_buckets(),
+            "total": 0, "efectivas": 0, "cancelados": 0, "aRetirar": 0, "buckets": nuevos_buckets(),
         })
         pz["total"] += 1
         if es_efectiva:
             pz["efectivas"] += 1
         if es_cancel:
             pz["cancelados"] += 1
+        if es_a_retirar:
+            pz["aRetirar"] += 1
         if bucket:
             sumar_bucket(pz["buckets"], bucket)
 
@@ -158,9 +168,9 @@ def calcular_snapshots(df: pd.DataFrame) -> dict:
 def publicar(snapshots: dict, sa_json: str):
     """
     Escribe cada snapshot en envios_daily/<fecha> y agrega esa fecha al
-    índice (envios_index/index) sin pisar fechas que ya estaban cargadas
-    por otra vía (carga manual desde el dashboard, u otra corrida) — mismo
-    criterio defensivo que usa handleFile() en el dashboard.
+    índice (envios_index/index) sin pisar fechas que ya estaban cargadas por
+    otra corrida — nunca se asume que el índice está vacío ni se sobrescribe
+    sin fusionar primero.
     """
     cred = credentials.Certificate(json.loads(sa_json))
     if not firebase_admin._apps:
