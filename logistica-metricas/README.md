@@ -103,10 +103,11 @@ suba el archivo por su cuenta. Alcanza con que una persona cargue el export
 del día una vez.
 
 **Dónde vive publicado:** el dashboard está alojado gratis en GitHub Pages,
-en **https://agra95.github.io/mercadopacks-metricas/** (repo:
-`github.com/Agra95/mercadopacks-metricas`, público). El HTML no necesita
-ningún proceso de build — cualquier cambio que se pushea a la rama `main` se
-refleja solo en esa URL en 1-2 minutos.
+en **https://mercadopacks.github.io/mercadopacks-metricas-diarias/** (repo:
+`github.com/mercadopacks/mercadopacks-metricas-diarias`, público, dentro de
+la organización `mercadopacks`). El HTML no necesita ningún proceso de
+build — cualquier cambio que se pushea a la rama `main` se refleja solo en
+esa URL en 1-2 minutos.
 
 **Cómo funciona el guardado compartido:** el archivo `dashboard_logistica.html`
 inicializa el SDK de Firebase (config del proyecto `mercadopacks-metricas`,
@@ -173,8 +174,8 @@ runner de GitHub Actions durante esa corrida y se descarta al terminar; lo
 que queda de forma permanente es el snapshot agregado en Firestore.
 
 **Configuración necesaria (una sola vez), en
-`github.com/Agra95/mercadopacks-metricas` → Settings → Secrets and
-variables → Actions → New repository secret:**
+`github.com/mercadopacks/mercadopacks-metricas-diarias` → Settings → Secrets
+and variables → Actions → New repository secret:**
 
 | Secret | Valor |
 |---|---|
@@ -238,3 +239,5 @@ Ideas para las próximas iteraciones, en orden sugerido:
 | 2026-09-02 | Rebranding: el dashboard pasó a llamarse "Seguimiento de envíos - Mercadopacks" (antes "Torre de Control · Envíos") y el logo autogenerado (SVG con las letras "MP") se reemplazó por el isotipo real de la empresa (`dashboard/assets/logo-mp.png`, embebido en el HTML como base64 para mantener el archivo autocontenido). |
 | 2026-09-02 | Se creó el repositorio git (`github.com/Agra95/mercadopacks-metricas`) y se publicó el dashboard en GitHub Pages (`agra95.github.io/mercadopacks-metricas`). El almacenamiento compartido se migró de `window.storage` (exclusivo de Claude.ai) a Firebase Firestore, para que el dashboard funcione como sitio independiente. Los `.xls` crudos (con datos personales de destinatarios) se excluyeron del repo vía `.gitignore` por ser un repo público. |
 | 2026-09-02 | Automatización de la descarga diaria: `scripts/descargar_lightdata.py` (Playwright) inicia sesión en LightData y descarga el export de "ayer", `scripts/publicar_firestore.py` calcula el mismo snapshot que el dashboard y lo publica en Firestore, orquestados por `.github/workflows/descarga_diaria.yml` (cron 00hs ART). Se cargaron los secrets y se probó de punta a punta con éxito: la automatización queda operativa. |
+| 2026-09-03 | Se cambió el cron de la automatización de `0 3 * * *` a `17 3 * * *` (correr unos minutos después de la hora en punto, no justo a las :00) para reducir la demora observada (~2hs) causada por la congestión típica de GitHub Actions en los horarios "en punto". |
+| 2026-09-04 | Se trasladó el repositorio de la cuenta personal (`Agra95/mercadopacks-metricas`) a la organización `mercadopacks`, renombrado a `mercadopacks-metricas-diarias`. Nueva URL pública: **https://mercadopacks.github.io/mercadopacks-metricas-diarias/**. Los secrets de Actions y la configuración de GitHub Pages se mantuvieron intactos durante la transferencia. |
